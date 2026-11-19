@@ -1,0 +1,158 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+import os
+
+from scipy.sparse import diags
+from scipy.sparse.linalg import splu
+
+from new_npmodel_shading_params import *
+
+
+def surface_nutrient_flux(t):
+    return FLUX_AMPLITUDE * (1 + np.sin(2 * np.pi * t / FLUX_PERIOD))
+
+def shading_profile(P):
+    """just adding a self-shading term"""
+    profile = np.exp((LIGHT_ATTENUATION + KP*P) * depth_levels)
+    return profile
+
+
+# --- Grid ---
+depth_levels = np.linspace(-DEPTH, 0, Nz)   # z=0 is the surface, z=-DEPTH is the bottom
+dz = depth_levels[1] - depth_levels[0]
+light_profile_pure = np.exp(LIGHT_ATTENUATION * depth_levels)  # relative light level at each depth
+
+# --- Mixing (diffusion) matrix, built once and factorized once ---
+# Implicit Crank-Nicolson in depth, with:
+#   bottom (z=-DEPTH): Dirichlet  -> value is held fixed by the caller
+#   top    (z=0):      Neumann    -> zero ghost-point derivative
+gamma = MIXING_RATE * dt / (2 * dz ** 2)
+
+main_diag = (1 + 2 * gamma) * np.ones(Nz)
+off_diag = -gamma * np.ones(Nz - 1)
+mixing_matrix = diags([off_diag, main_diag, off_diag], [-1, 0, 1], format="lil")
+mixing_matrix[0, 0], mixing_matrix[0, 1] = 1.0, 0.0
+mixing_matrix[-1, -2] = -2 * gamma
+mixing_solver = splu(mixing_matrix.tocsc())
+
+
+def apply_growth(N, P, dt):
+    """One RK4 step of nutrient uptake / phytoplankton growth and mortality."""
+
+    def rates(N, P):
+        if SHADING_ENABLED:
+            light_profile = shading_profile(P)
+        else: light_profile = light_profile_pure
+        growth = GROWTH_RATE * N * P * light_profile - MORTALITY_RATE * P
+        return -growth, growth
+
+    dN1, dP1 = rates(N, P)
+    dN2, dP2 = rates(N + dt / 2 * dN1, P + dt / 2 * dP1)
+    dN3, dP3 = rates(N + dt / 2 * dN2, P + dt / 2 * dP2)
+    dN4, dP4 = rates(N + dt * dN3, P + dt * dP3)
+
+    N_next = N + dt / 6 * (dN1 + 2 * dN2 + 2 * dN3 + dN4)
+    P_next = P + dt / 6 * (dP1 + 2 * dP2 + 2 * dP3 + dP4)
+    return N_next, P_next
+
+
+def apply_sinking(P, dt):
+    """One upwind-advection step moving phytoplankton downward."""
+    courant = SINK_SPEED * dt / dz   # <= 0, since sinking is downward
+    P_next = P.copy()
+    P_next[:-1] -= courant * (P[1:] - P[:-1])
+    P_next[-1] += courant * P[-1]
+    return P_next
+
+
+def apply_mixing(profile, bottom_value, top_flux=0.0):
+    """One implicit (Crank-Nicolson) vertical mixing step."""
+    rhs = np.empty_like(profile)
+    rhs[1:-1] = gamma * profile[:-2] + (1 - 2 * gamma) * profile[1:-1] + gamma * profile[2:]
+    rhs[0] = bottom_value
+    rhs[-1] = 2 * gamma * profile[-2] + (1 - 2 * gamma) * profile[-1] + top_flux
+    return mixing_solver.solve(rhs)
+
+
+# --- Initial conditions ---
+N = np.full(Nz, 0.5)
+P = np.full(Nz, 0.5)
+N[0], P[0] = N0, P0   # bottom boundary values
+
+N_history = np.zeros((N_FRAMES, Nz))
+P_history = np.zeros((N_FRAMES, Nz))
+N_history[0], P_history[0] = N, P
+
+# --- Main time integration loop ---
+for frame in range(1, N_FRAMES):
+    for step in range(STEPS_PER_FRAME):
+        t = ((frame - 1) * STEPS_PER_FRAME + step) * dt
+        if GROWTH_ENABLED:
+            N, P = apply_growth(N, P, dt)
+
+        if SINKING_ENABLED:
+            P = apply_sinking(P, dt)
+
+        if MIXING_ENABLED:
+            top_flux = gamma * (2 * dz / MIXING_RATE) * (
+                surface_nutrient_flux(t) + surface_nutrient_flux(t + dt)
+            )
+            N = apply_mixing(N, bottom_value=1.0, top_flux=top_flux)
+            P = apply_mixing(P, bottom_value=0.0)
+        
+        N[0] = N0
+        P[0] = P0
+    N_history[frame], P_history[frame] = N, P
+
+
+# --- Saving data ------------
+exp_name = 'basecase_growth_mixing'
+save_dir = './data/'
+os.makedirs(save_dir, exist_ok=True)
+filenameN = os.path.join(save_dir, exp_name+'_N')
+filenameP = os.path.join(save_dir, exp_name+'_P')
+np.save(filenameN, N_history)
+np.save(filenameP, P_history)
+
+# --- Plotting & animation ---
+fig, ax = plt.subplots()
+
+
+def draw_frame(frame):
+    ax.clear()
+    ax.plot(N_history[frame], depth_levels, label="Nutrients (N)")
+    ax.plot(P_history[frame], depth_levels, label="Phytoplankton (P)")
+    days = frame * STEPS_PER_FRAME * dt / 86400
+    ax.set_title(f"Time: {days:.1f} Days")
+    ax.set_xlabel("Concentration")
+    ax.set_ylabel("Depth (m)")
+    ax.legend(loc="upper right")
+    ax.grid(True, linestyle="--", alpha=0.5)
+
+
+ani = animation.FuncAnimation(fig=fig, func=draw_frame, frames=N_FRAMES, interval=100)
+plt.show()
+# ani.save("movie.gif", writer="pillow")  # Uncomment to save
+
+
+def plot_time_series(depth_index=-1):
+    """Plot N and P at a single depth across the whole run (default: surface)."""
+    days = np.arange(N_FRAMES) * STEPS_PER_FRAME * dt / 86400
+
+    fig, (ax_N, ax_P) = plt.subplots(2, 1, sharex=True)
+    fig.suptitle(f"Time series at depth = {depth_levels[depth_index]:.0f} m")
+
+    ax_N.plot(days, N_history[:, depth_index])
+    ax_N.set_ylabel("Nutrients (N)")
+    ax_N.grid(True, linestyle="--", alpha=0.5)
+
+    ax_P.plot(days, P_history[:, depth_index])
+    ax_P.set_ylabel("Phytoplankton (P)")
+    ax_P.set_xlabel("Time (days)")
+    ax_P.grid(True, linestyle="--", alpha=0.5)
+
+    plt.show()
+
+
+plot_time_series()  # surface by default; pass e.g. depth_index=0 for the bottom
