@@ -28,6 +28,13 @@ SINK_SPEED = -0.5 / 86400      # phytoplankton sinking speed (m/s, negative = do
 FLUX_AMPLITUDE = 1e-5
 FLUX_PERIOD = 365 * 86400      # one year, in seconds
 
+N_BOTTOM = 1.0
+P_BOTTOM = 0.0
+
+def apply_bottom_bc(N, P):
+    N[0], P[0] = N_BOTTOM, P_BOTTOM
+    return N, P
+
 
 def surface_nutrient_flux(t):
     return FLUX_AMPLITUDE * (1 + np.sin(2 * np.pi * t / FLUX_PERIOD))
@@ -77,11 +84,11 @@ def apply_sinking(P, dt):
     return P_next
 
 
-def apply_mixing(profile, bottom_value, top_flux=0.0):
-    """One implicit (Crank-Nicolson) vertical mixing step."""
+def apply_mixing(profile, top_flux=0.0):
+    """One implicit (Crank-Nicolson) vertical mixing step. """
     rhs = np.empty_like(profile)
     rhs[1:-1] = gamma * profile[:-2] + (1 - 2 * gamma) * profile[1:-1] + gamma * profile[2:]
-    rhs[0] = bottom_value
+    rhs[0] = profile[0]   # keep the bottom value as given
     rhs[-1] = 2 * gamma * profile[-2] + (1 - 2 * gamma) * profile[-1] + top_flux
     return mixing_solver.solve(rhs)
 
@@ -102,23 +109,23 @@ for frame in range(1, N_FRAMES):
 
         if GROWTH_ENABLED:
             N, P = apply_growth(N, P, dt)
+            N, P = apply_bottom_bc(N, P)
 
         if SINKING_ENABLED:
             P = apply_sinking(P, dt)
+            N, P = apply_bottom_bc(N, P)
 
         if MIXING_ENABLED:
             top_flux = gamma * (2 * dz / MIXING_RATE) * (
                 surface_nutrient_flux(t) + surface_nutrient_flux(t + dt)
             )
-            N = apply_mixing(N, bottom_value=1.0, top_flux=top_flux)
-            P = apply_mixing(P, bottom_value=0.0)
+            N = apply_mixing(N, top_flux=top_flux)
+            P = apply_mixing(P, top_flux=0.0)
+            N, P = apply_bottom_bc(N, P)
 
     N_history[frame], P_history[frame] = N, P
 
 # --- Plotting & animation ---
-fig, ax = plt.subplots()
-
-
 def draw_frame(frame):
     ax.clear()
     ax.plot(N_history[frame], depth_levels, label="Nutrients (N)")
@@ -130,9 +137,6 @@ def draw_frame(frame):
     ax.legend(loc="upper right")
     ax.grid(True, linestyle="--", alpha=0.5)
 
-
-ani = animation.FuncAnimation(fig=fig, func=draw_frame, frames=N_FRAMES, interval=100)
-plt.show()
 # ani.save("movie.gif", writer="pillow")  # Uncomment to save
 
 
@@ -154,5 +158,24 @@ def plot_time_series(depth_index=-1):
 
     plt.show()
 
+def plot_integrated():
+    days = np.arange(N_FRAMES) * STEPS_PER_FRAME * dt / 86400
+    fig, (ax_N, ax_P) = plt.subplots(2, 1, sharex=True)
+    fig.suptitle("Integrated Time Series")
 
+    ax_N.plot(days, np.sum(N_history, axis=1))
+    ax_N.set_ylabel("Integrated Nutrients (N)")
+    ax_N.grid(True, linestyle="--", alpha=0.5)
+
+    ax_P.plot(days, np.sum(P_history, axis=1))
+    ax_P.set_ylabel("Integrated Phytoplankton (P)")
+    ax_P.set_xlabel("Time (days)")
+    ax_P.grid(True, linestyle="--", alpha=0.5)
+
+    plt.show()
+
+fig, ax = plt.subplots()
+ani = animation.FuncAnimation(fig=fig, func=draw_frame, frames=N_FRAMES, interval=100)
+plt.show()
+plot_integrated()
 plot_time_series()  # surface by default; pass e.g. depth_index=0 for the bottom
