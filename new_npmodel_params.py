@@ -2,7 +2,7 @@
 GROWTH_ENABLED = True    # nutrient uptake / phytoplankton growth & mortality
 SINKING_ENABLED = False   # phytoplankton sinking (advection)
 MIXING_ENABLED = True    # vertical turbulent mixing (diffusion)
-SHADING_ENABLED = False   # whether to add shading due to phytoplankton
+SHADING_ENABLED = True   # whether to add shading due to phytoplankton
 
 # --- Grid & timestepping ---
 DEPTH = 250.0           # water column depth (m)
@@ -12,10 +12,10 @@ STEPS_PER_FRAME = 100   # integration substeps between snapshots
 dt = 900               # substep length (s)
 
 # --- BCs ---
-N0 = 1.0
-P0 = 0.0
+N_BOTTOM = 1.0
+P_BOTTOM = 0.0
 
-
+# --- Model parameters ---
 GROWTH_RATE = 20 / 86400       # max growth rate (1/s)
 MORTALITY_RATE = 0.1 / 86400   # mortality / remineralization rate (1/s)
 LIGHT_ATTENUATION = 0.05       # how fast light decays with depth (1/m)

@@ -1,49 +1,30 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+import os
+
 from scipy.sparse import diags
 from scipy.sparse.linalg import splu
 
-# --- Physics to include ---
-GROWTH_ENABLED = True    # nutrient uptake / phytoplankton growth & mortality
-SINKING_ENABLED = True   # phytoplankton sinking (advection)
-MIXING_ENABLED = True    # vertical turbulent mixing (diffusion)
-
-# --- Grid & timestepping ---
-DEPTH = 250.0           # water column depth (m)
-Nz = 64                 # number of depth levels
-N_FRAMES = 500          # number of saved snapshots
-STEPS_PER_FRAME = 100   # integration substeps between snapshots
-dt = 900               # substep length (s)
-
-
-GROWTH_RATE = 20 / 86400       # max growth rate (1/s)
-MORTALITY_RATE = 0.1 / 86400   # mortality / remineralization rate (1/s)
-LIGHT_ATTENUATION = 0.05       # how fast light decays with depth (1/m)
-
-MIXING_RATE = 1e-4             # vertical turbulent diffusivity (m^2/s)
-SINK_SPEED = -0.5 / 86400      # phytoplankton sinking speed (m/s, negative = downward)
-
-# --- Seasonal surface nutrient supply: oscillates between 0 and 2*FLUX_AMPLITUDE ---
-FLUX_AMPLITUDE = 1e-5
-FLUX_PERIOD = 365 * 86400      # one year, in seconds
-
-N_BOTTOM = 1.0
-P_BOTTOM = 0.0
+from new_npmodel_params import *
 
 def apply_bottom_bc(N, P):
     N[0], P[0] = N_BOTTOM, P_BOTTOM
     return N, P
 
-
 def surface_nutrient_flux(t):
     return FLUX_AMPLITUDE * (1 + np.sin(2 * np.pi * t / FLUX_PERIOD))
+
+def shading_profile(P):
+    """just adding a self-shading term"""
+    profile = np.exp((LIGHT_ATTENUATION + KP*P) * depth_levels)
+    return profile
 
 
 # --- Grid ---
 depth_levels = np.linspace(-DEPTH, 0, Nz)   # z=0 is the surface, z=-DEPTH is the bottom
 dz = depth_levels[1] - depth_levels[0]
-light_profile = np.exp(LIGHT_ATTENUATION * depth_levels)  # relative light level at each depth
+light_profile_pure = np.exp(LIGHT_ATTENUATION * depth_levels)  # relative light level at each depth
 
 # --- Mixing (diffusion) matrix, built once and factorized once ---
 # Implicit Crank-Nicolson in depth, with:
@@ -62,6 +43,9 @@ mixing_solver = splu(mixing_matrix.tocsc())
 def apply_growth(N, P, dt):
     """One RK4 step of nutrient uptake / phytoplankton growth and mortality."""
     def rates(N, P):
+        if SHADING_ENABLED:
+            light_profile = shading_profile(P)
+        else: light_profile = light_profile_pure
         growth = GROWTH_RATE * N * P * light_profile - MORTALITY_RATE * P
         return -growth, growth
 
@@ -124,6 +108,15 @@ for frame in range(1, N_FRAMES):
             N, P = apply_bottom_bc(N, P)
 
     N_history[frame], P_history[frame] = N, P
+
+# --- Saving data ------------
+exp_name = 'basecase_growth_mixing'
+save_dir = './data/'
+os.makedirs(save_dir, exist_ok=True)
+filenameN = os.path.join(save_dir, exp_name+'_N')
+filenameP = os.path.join(save_dir, exp_name+'_P')
+np.save(filenameN, N_history)
+np.save(filenameP, P_history)
 
 # --- Plotting & animation ---
 def draw_frame(frame):
