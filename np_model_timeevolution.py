@@ -45,9 +45,14 @@ sinking = True
 for out in range(1,numouts):
     # iterate through time
     for n in range(numsteps):
-        # BCs at bottom (Dirichlet):
-        N_curr[0] = 1
+        # BCs at bottom (Dirichlet for P):
+        #N_curr[0] = 1
         P_curr[0] = 0
+        # BCs at bottom (Neumann for N):
+        N_curr[0] = (
+            N_prev[0] - dt*mu(N_prev[0],P_prev[0],zs[0]) + 
+            2*kappa*dt*(N_prev[1]-N_prev[0])/(pow(dz,2))
+        )
         if (not sinking):
             # iterate through z
             for i in range(1,Nz-1):
