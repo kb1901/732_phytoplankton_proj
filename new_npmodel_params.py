@@ -2,7 +2,7 @@
 GROWTH_ENABLED = True    # nutrient uptake / phytoplankton growth & mortality
 SINKING_ENABLED = False   # phytoplankton sinking (advection)
 MIXING_ENABLED = True    # vertical turbulent mixing (diffusion)
-SHADING_ENABLED = True   # whether to add shading due to phytoplankton
+SHADING_ENABLED = False   # whether to add shading due to phytoplankton
 
 # --- Grid & timestepping ---
 DEPTH = 250.0           # water column depth (m)
@@ -14,6 +14,7 @@ dt = 900               # substep length (s)
 # --- BCs ---
 N_BOTTOM = 1.0
 P_BOTTOM = 0.0
+N_BOTTOM_NEUMANN = True
 
 # --- Model parameters ---
 GROWTH_RATE = 20 / 86400       # max growth rate (1/s)
@@ -25,5 +26,5 @@ MIXING_RATE = 1e-4             # vertical turbulent diffusivity (m^2/s)
 SINK_SPEED = -0.5 / 86400      # phytoplankton sinking speed (m/s, negative = downward)
 
 # --- Seasonal surface nutrient supply: oscillates between 0 and 2*FLUX_AMPLITUDE ---
-FLUX_AMPLITUDE = 1e-5
+FLUX_AMPLITUDE = 0 #1e-5
 FLUX_PERIOD = 365 * 86400      # one year, in seconds

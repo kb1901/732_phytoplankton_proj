@@ -9,7 +9,8 @@ from scipy.sparse.linalg import splu
 from new_npmodel_params import *
 
 def apply_bottom_bc(N, P):
-    N[0], P[0] = N_BOTTOM, P_BOTTOM
+    if(N_BOTTOM_NEUMANN): P[0] = P_BOTTOM
+    else: N[0], P[0] = N_BOTTOM, P_BOTTOM
     return N, P
 
 def surface_nutrient_flux(t):
@@ -26,18 +27,26 @@ depth_levels = np.linspace(-DEPTH, 0, Nz)   # z=0 is the surface, z=-DEPTH is th
 dz = depth_levels[1] - depth_levels[0]
 light_profile_pure = np.exp(LIGHT_ATTENUATION * depth_levels)  # relative light level at each depth
 
-# --- Mixing (diffusion) matrix, built once and factorized once ---
-# Implicit Crank-Nicolson in depth, with:
-#   bottom (z=-DEPTH): Dirichlet  -> value is held fixed by the caller
-#   top    (z=0):      Neumann    -> zero ghost-point derivative
+# --- Mixing (diffusion) matrices, two variants ---
+# Both Implicit Crank-Nicolson in depth, with slighty different BCs.
 gamma = MIXING_RATE * dt / (2 * dz ** 2)
 
 main_diag = (1 + 2 * gamma) * np.ones(Nz)
 off_diag = -gamma * np.ones(Nz - 1)
+
+#   bottom (z=-DEPTH): Dirichlet  -> value is held fixed by the caller
+#   top    (z=0):      Neumann    -> zero derivative
 mixing_matrix = diags([off_diag, main_diag, off_diag], [-1, 0, 1], format="lil")
 mixing_matrix[0, 0], mixing_matrix[0, 1] = 1.0, 0.0
 mixing_matrix[-1, -2] = -2 * gamma
 mixing_solver = splu(mixing_matrix.tocsc())
+
+#   bottom (z=-DEPTH): Neumann    -> zero derivative
+#   top    (z=0):      Neumann    -> zero derivative
+mixing_matrix_alt = diags([off_diag, main_diag, off_diag], [-1, 0, 1], format="lil")
+mixing_matrix_alt[0,1] = -2 * gamma
+mixing_matrix_alt[-1, -2] = -2 * gamma
+mixing_solver_alt = splu(mixing_matrix_alt.tocsc())
 
 
 def apply_growth(N, P, dt):
@@ -68,13 +77,18 @@ def apply_sinking(P, dt):
     return P_next
 
 
-def apply_mixing(profile, top_flux=0.0):
+def apply_mixing(profile, top_flux=0.0, bot_neumann=False):
     """One implicit (Crank-Nicolson) vertical mixing step. """
     rhs = np.empty_like(profile)
     rhs[1:-1] = gamma * profile[:-2] + (1 - 2 * gamma) * profile[1:-1] + gamma * profile[2:]
-    rhs[0] = profile[0]   # keep the bottom value as given
     rhs[-1] = 2 * gamma * profile[-2] + (1 - 2 * gamma) * profile[-1] + top_flux
-    return mixing_solver.solve(rhs)
+    if bot_neumann:
+        rhs[0] = (1 - 2 * gamma) * profile[0] + 2 * gamma * profile[0]
+        return mixing_solver_alt.solve(rhs)
+    else:
+        rhs[0] = profile[0]   # keep the bottom value as given
+        return mixing_solver.solve(rhs)
+        
 
 
 # --- Initial conditions ---
@@ -103,7 +117,7 @@ for frame in range(1, N_FRAMES):
             top_flux = gamma * (2 * dz / MIXING_RATE) * (
                 surface_nutrient_flux(t) + surface_nutrient_flux(t + dt)
             )
-            N = apply_mixing(N, top_flux=top_flux)
+            N = apply_mixing(N, top_flux=top_flux, bot_neumann=N_BOTTOM_NEUMANN)
             P = apply_mixing(P, top_flux=0.0)
             N, P = apply_bottom_bc(N, P)
 
