@@ -8,6 +8,7 @@ from scipy.sparse.linalg import splu
 
 from new_npmodel_params import *
 
+# ---  helper functions --- 
 def apply_bottom_bc(N, P):
     if(N_BOTTOM_NEUMANN): P[0] = P_BOTTOM
     else: N[0], P[0] = N_BOTTOM, P_BOTTOM
@@ -18,14 +19,14 @@ def surface_nutrient_flux(t):
 
 def shading_profile(P):
     """just adding a self-shading term"""
-    profile = np.exp((LIGHT_ATTENUATION + KP*P) * depth_levels)
+    profile = np.exp(-(LIGHT_ATTENUATION + KP*P) * depth_levels)
     return profile
 
 
 # --- Grid ---
 depth_levels = np.linspace(-DEPTH, 0, Nz)   # z=0 is the surface, z=-DEPTH is the bottom
 dz = depth_levels[1] - depth_levels[0]
-light_profile_pure = np.exp(LIGHT_ATTENUATION * depth_levels)  # relative light level at each depth
+light_profile_pure = np.exp(-LIGHT_ATTENUATION * depth_levels)  # relative light level at each depth
 
 # --- Mixing (diffusion) matrices, two variants ---
 # Both Implicit Crank-Nicolson in depth, with slighty different BCs.
@@ -48,7 +49,7 @@ mixing_matrix_alt[0,1] = -2 * gamma
 mixing_matrix_alt[-1, -2] = -2 * gamma
 mixing_solver_alt = splu(mixing_matrix_alt.tocsc())
 
-
+# --- split operators for timestepping and applying BCs ---
 def apply_growth(N, P, dt):
     """One RK4 step of nutrient uptake / phytoplankton growth and mortality."""
     def rates(N, P):
@@ -83,7 +84,7 @@ def apply_mixing(profile, top_flux=0.0, bot_neumann=False):
     rhs[1:-1] = gamma * profile[:-2] + (1 - 2 * gamma) * profile[1:-1] + gamma * profile[2:]
     rhs[-1] = 2 * gamma * profile[-2] + (1 - 2 * gamma) * profile[-1] + top_flux
     if bot_neumann:
-        rhs[0] = (1 - 2 * gamma) * profile[0] + 2 * gamma * profile[0]
+        rhs[0] = (1 - 2 * gamma) * profile[0] + 2 * gamma * profile[1]
         return mixing_solver_alt.solve(rhs)
     else:
         rhs[0] = profile[0]   # keep the bottom value as given
@@ -94,7 +95,7 @@ def apply_mixing(profile, top_flux=0.0, bot_neumann=False):
 # --- Initial conditions ---
 N = np.full(Nz, 0.5)
 P = np.full(Nz, 0.5)
-N[0], P[0] = 1.0, 0.0   # bottom boundary values
+N[0], P[0] = N_BOTTOM, P_BOTTOM  # bottom boundary values
 
 N_history = np.zeros((N_FRAMES, Nz))
 P_history = np.zeros((N_FRAMES, Nz))
@@ -124,13 +125,14 @@ for frame in range(1, N_FRAMES):
     N_history[frame], P_history[frame] = N, P
 
 # --- Saving data ------------
-exp_name = 'basecase_growth_mixing'
-save_dir = './data/'
-os.makedirs(save_dir, exist_ok=True)
-filenameN = os.path.join(save_dir, exp_name+'_N')
-filenameP = os.path.join(save_dir, exp_name+'_P')
-np.save(filenameN, N_history)
-np.save(filenameP, P_history)
+if SAVE:
+    exp_name = 'basecase_dirichlet'
+    save_dir = './data/'
+    os.makedirs(save_dir, exist_ok=True)
+    filenameN = os.path.join(save_dir, exp_name+'_N')
+    filenameP = os.path.join(save_dir, exp_name+'_P')
+    np.save(filenameN, N_history)
+    np.save(filenameP, P_history)
 
 # --- Plotting & animation ---
 def draw_frame(frame):
