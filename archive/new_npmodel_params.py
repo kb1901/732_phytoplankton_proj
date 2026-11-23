@@ -1,7 +1,7 @@
 # --- Physics to include ---
-GROWTH_ENABLED = True    # nutrient uptake / phytoplankton growth & mortality
+GROWTH_ENABLED = True     # nutrient uptake / phytoplankton growth & mortality
 SINKING_ENABLED = False   # phytoplankton sinking (advection)
-MIXING_ENABLED = True    # vertical turbulent mixing (diffusion)
+MIXING_ENABLED = True     # vertical turbulent mixing (diffusion)
 SHADING_ENABLED = False   # whether to add shading due to phytoplankton
 
 # --- Grid & timestepping ---
@@ -9,7 +9,7 @@ DEPTH = 250.0           # water column depth (m)
 Nz = 64                 # number of depth levels
 N_FRAMES = 500          # number of saved snapshots
 STEPS_PER_FRAME = 100   # integration substeps between snapshots
-dt = 900               # substep length (s)
+dt = 900                # substep length (s)
 
 # --- BCs ---
 N_BOTTOM = 1.0
