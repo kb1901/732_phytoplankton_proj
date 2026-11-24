@@ -152,7 +152,7 @@ def run(params_file="params.py", save_as=None, **overrides):
         N_history[frame], P_history[frame] = N, P
 
     days = np.arange(n_frames) * steps_per_frame * dt / 86400
-    res = Result(days, depth, N_history, P_history)
+    res = Result(days[1:], depth, N_history[1:], P_history[1:])
     if save_as: np.savez(save_as, **res._asdict())
     return res
 

@@ -14,13 +14,16 @@ def profiles(res, days):
     ax[0].set_title("N"); ax[1].set_title("P"); ax[0].set_ylabel("Depth (m)"); ax[0].legend()
     return fig, ax
 
-def hovmoller(res, var="P", zmin=None):
-    fig, ax = plt.subplots()
-    m = ax.pcolormesh(res.days, res.depth, getattr(res, var).T, shading="auto")
+def hovmoller(res, var="P", zmin=None, max_day=None, fig=None, ax=None):
+    if ax is None or fig is None:
+        fig, ax = plt.subplots()
+    if max_day is None:
+        max_day = len(res.days)+1
+    m = ax.pcolormesh(res.days[:max_day], res.depth, getattr(res, var)[:max_day, :].T, shading="auto")
     fig.colorbar(m, label=var)
     if zmin is not None: ax.set_ylim(zmin, 0)
     ax.set_xlabel("Time (days)"); ax.set_ylabel("Depth (m)")
-    return fig, ax
+    return ax
 
 def timeseries(res, depths=(-5, -50, -100), var="P"):
     fig, ax = plt.subplots()
