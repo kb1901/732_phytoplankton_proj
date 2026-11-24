@@ -5,6 +5,7 @@ GROWTH_ENABLED = True     # nutrient uptake / phytoplankton growth & mortality
 SINKING_ENABLED = False   # phytoplankton sinking (advection)
 MIXING_ENABLED = True     # vertical turbulent mixing (diffusion)
 SHADING_ENABLED = False   # self-shading by phytoplankton
+SHADING_MODE = "integral"   # "integral": shading by all P above each depth; "local": shading by P at that depth 
 
 # --- Solution order (operator-splitting) ---
 # List of (process, fraction of the time step). Splitting run in this order; each process's fractions must sum to 1.

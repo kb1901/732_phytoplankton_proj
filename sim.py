@@ -71,10 +71,23 @@ def run(params_file="params.py", save_as=None, **overrides):
         else: N[0], P[0] = N_bot_value(t), p.P_BOT_VALUE
         return N, P
 
+    def P_above(P):
+        """Integral of P from the surface down to each depth (trapezoid rule)."""
+        P_top_first = P[::-1]
+        cum = np.concatenate(([0.0], np.cumsum(0.5 * (P_top_first[1:] + P_top_first[:-1]) * dz)))
+        return cum[::-1]
+
+    def light_profile(P):
+        if not p.SHADING_ENABLED:
+            return light_unshaded
+        if p.SHADING_MODE == "local":
+            return np.exp((p.LIGHT_ATTENUATION + p.SHADING_COEFF * P) * depth)
+        return np.exp(p.LIGHT_ATTENUATION * depth - p.SHADING_COEFF * P_above(P))
+
     def apply_growth(N, P, h, t):
         """One RK4 step of nutrient uptake / phytoplankton growth and mortality; t = time at stage midpoint."""
         def rates(N, P):
-            light = np.exp((p.LIGHT_ATTENUATION + p.SHADING_COEFF * P) * depth) if p.SHADING_ENABLED else light_unshaded
+            light = light_profile(P)
             growth = p.GROWTH_RATE * N * P * light * p.LIGHT_FORCING(t) - p.MORTALITY_RATE * p.MORTALITY_FORCING(t) * P
             return -growth, growth
         dN1, dP1 = rates(N, P)
