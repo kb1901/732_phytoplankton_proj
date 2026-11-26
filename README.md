@@ -34,6 +34,10 @@ To override the default parameters, specify them as a function argument in the s
 sim.run( {PARAM_NAME}={PARAM_VALUE} )
 ```
 
+By default, the params_file being read is `params.py` in this repo. You can change parameters in this file as desired
+
+## Examples
+
 
 
 
