@@ -1,7 +1,7 @@
 # 1D Vertical Biogeochemical NP Model
 
-A one-dimensional vertical biogeochemical model for the Nutrient–Phytoplankton (NP) cycle, based largely on the work by Hodges
-and Rudnik (2004). Simulates the vertical distribution of a water column and time evolution of N and P under various
+A one-dimensional vertical biogeochemical model for the Nutrient–Phytoplankton (NP) cycle.
+Simulates the vertical distribution of a water column and time evolution of N and P under various
 physical processes, including: 
 - light-limited growth
 - mortality
@@ -17,14 +17,21 @@ for diffusion, and Heun's method and central difference for sinking.
 - `plots.py` - Visualization helper functions
 - `*.ipynb` - Exploratory notebooks 
 
-## Getting Started
+## User Details
 Install the necessary dependencies: 
 ```
 pip install -r requirements.txt
 ```
-Run the simulation:
+To run the simulation:
 ```
-python sim.py
+ python sim.py [params_file] [save_name]
+```
+The simulation returns: 
+```# days: (frames,), depth: (NZ,) in m (negative down), N and P: (frames, NZ)```
+
+To override the default parameters, specify them as a function argument in the same way as `params.py`: 
+```
+sim.run( {PARAM_NAME}={PARAM_VALUE} )
 ```
 
 
