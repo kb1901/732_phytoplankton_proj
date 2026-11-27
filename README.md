@@ -38,6 +38,6 @@ By default, the params_file being read is `params.py` in this repo. You can chan
 
 ## Examples
 
-
+Please see `notebook.ipynb` for example runs as well as plots!
 
 
